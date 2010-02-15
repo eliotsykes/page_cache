@@ -1,0 +1,106 @@
+PageCache
+=========
+
+Holeless page caching for Rails.
+
+Users never have to wait for cached pages to be generated (unlike the page
+caching that ships with Rails).
+
+The page cache is populated by a rake task before deployment
+completes.  The page cache can be 'holelessly' expired and refreshed while
+the app is running.
+
+NOTE: This plugin is a work in progress, if you use it, be sure it is doing
+what you expect it to and placing the cached files where you need them. You
+are responsible for ensuring your web server (often Apache) serves the static
+cached files when needed. Some rewrite rules are given in the example below for
+you to use/modify for your own needs.
+
+Example
+=======
+
+In config/environments/production.rb (and config/environments/development.rb if you want
+to manually test page caching), ensure these configuration options are set:
+
+config.cache_classes = true
+config.action_controller.perform_caching = true
+
+In your ApplicationController (application_controller.rb), include the
+PageCache::PageCaching module.
+
+class ApplicationController < ActionController::Base
+  include PageCache::PageCaching
+  
+  ...
+
+In a controller where you want to use page caching, e.g. PostsController:
+
+class PostsController < ApplicationController
+  # Simple page caching
+  cached_pages :some_action, :another_action
+  
+  # The posts page is cached, but will be expired if the PostPublishedEvent
+  # or PostDeleteEvent occur. For the :expires_on to have any affect, you
+  # will need to ensure these events are passed on to 
+  # PageCache::CachedPage.handle_event(event). More info below.
+  cached_pages :list,
+    { :expires_on => [ PostPublishedEvent, PostArchivedEvent ] }
+  
+  def some_action
+  end
+  
+  def another_action
+  end
+  
+  def list
+  end
+end
+
+Set up rewrite rules like the following in your .htaccess:
+
+# Turn rewriting engine on
+RewriteEngine on
+
+# Serve files from live cache directory if available
+RewriteCond %{HTTP_HOST} ^(.+)\.example.tld$
+RewriteCond %{DOCUMENT_ROOT}/cache/live/%1/%{REQUEST_URI} -f
+RewriteRule ^(.*)$ cache/live/%1/$1 [QSA,PT,L]
+
+When you deploy, using capistrano, call the 'rake page_cache:update' task.
+
+To update your cache periodically, call rake page_cache:update in cron. Note 
+this will only update the page cache if cached files have been expired using
+the CachedPage#expire method. This method is called when the :expires_on events
+happen.
+
+***OPTIONAL START***
+*If* you use the :expires_on array option with the cached_pages method as shown
+in the 2nd example above, then you will need to ensure events are passed to
+the PageCache::CachedPage.handle_event(event) method. One suggestion is to create
+a simple EventMulticaster class in your app, like so:
+
+class EventMulticaster
+  def self.publish(event)
+    PageCache::CachedPage.handle_event(event)
+  end
+end
+
+Create event classes like these:
+
+class PostPublishedEvent
+  def self.fire
+    EventMulticaster.publish self.new
+  end
+end
+
+When a new Post is published, then you would fire the PostPublishedEvent like so:
+
+PostPublishedEvent.fire
+
+The event would be received by CachedPage.handle_event(event) and this would
+result in cached files being expired/deleted that were defined with expires_on
+arrays containing the PostPublishedEvent class.
+***OPTIONAL END***
+
+  
+Copyright (c) 2010 Eliot Sykes (http://blog.eliotsykes.com), released under the MIT license
