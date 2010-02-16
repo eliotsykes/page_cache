@@ -19,7 +19,7 @@ module PageCache
     def determine_url(only_path=false)
       # TODO handle different formats
       url_for(:controller => controller.controller_path,
-        :action => action, :format => 'xml', :only_path => only_path)
+        :action => action, :only_path => only_path)
     end
     
     def self.add_cached_pages(options)
