@@ -3,13 +3,15 @@ module PageCache
     include ActionController::UrlWriter
 
     cattr_accessor :cached_pages
-    attr_accessor :controller, :action, :expires_on, :url, :latest_path, :live_path
+    attr_accessor :controller, :action, :expires_on, :url, :latest_path, :live_path, :subdomain
     
     def initialize(options)
       self.controller = options[:controller]
       self.action = options[:action]
       self.expires_on = options[:expires_on]
       self.url = determine_url
+      # TODO determine subdomain from url.
+      self.subdomain = 'www'
       only_path = true
       request_path = determine_url(only_path)
       self.latest_path = filesystem_path 'latest', request_path
@@ -35,6 +37,11 @@ module PageCache
         new :controller => controller, :action => action, :expires_on => expires_on
       end
       cached_pages_array
+    end
+    
+    def self.cache(request, response)
+      cached_page = find_by_url request.url
+      cached_page.cache(response.body)
     end
     
     def cache(content)
@@ -105,8 +112,6 @@ module PageCache
     end
     
     def filesystem_path(cache_stage, request_path)
-      # TODO don't hardcode www subdomain in path
-      subdomain = 'www'
       "#{PageCache::CachedPage.page_cache_directory}/#{cache_stage}/#{subdomain}#{page_cache_file(request_path)}"
     end
     

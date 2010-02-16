@@ -20,8 +20,7 @@ module PageCache
       # TODO raise exception
       # if perform_caching && not_localhost
       # end
-      cached_page = PageCache::CachedPage.find_by_url request.url
-      cached_page.cache(response.body)
+      CachedPage.cache(request, response)
     end
     
   end
