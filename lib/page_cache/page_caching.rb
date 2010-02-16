@@ -17,9 +17,9 @@ module PageCache
     
     def do_page_caching
       return unless perform_caching && caching_allowed
-      # TODO raise exception
-      # if perform_caching && not_localhost
-      # end
+      unless local_request?
+        raise RuntimeError.new 'Page caching not enabled for non-local requests. Cached page should have been generated at deployment.'
+      end
       CachedPage.cache(request, response)
     end
     
