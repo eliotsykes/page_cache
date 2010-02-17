@@ -1,26 +1,56 @@
 PageCache
 =========
 
-Holeless page caching for Rails.
+Holeless page caching plugin for Rails.
 
-Users never have to wait for cached pages to be generated (unlike the page
-caching that ships with Rails).
+Inspired by the Pivotal Labs "Rails, Slashdotted: no problem" article:
+http://pivotallabs.com/users/steve/blog/articles/262-rails-slashdotted-no-problem
+
+With this plugin, users never have to wait for cached pages to be generated
+(unlike the page caching that ships with Rails).
+
+You can safely use this plugin alongside Rails' existing page caching mechanism
+as it does not interfere with it.
 
 The page cache is populated by a rake task before deployment
-completes.  The page cache can be 'holelessly' expired and refreshed while
-the app is running.
+completes.  The page cache can optionally be 'holelessly' expired and refreshed
+while the app is running.
 
-NOTE: This plugin is a work in progress, if you use it, be sure it is doing
-what you expect it to and placing the cached files where you need them. You
-are responsible for ensuring your web server (often Apache) serves the static
-cached files when needed. Some rewrite rules are given in the example below for
-you to use/modify for your own needs.
+The holeless/seamless caching works by having two cache stages, that exist as 
+two distinct directories.
+
+The cache stages are "latest" and "live".
+
+The "latest" stage/directory contains the most recently generated cached files.
+When a cached file is created, it is written to the "latest" directory. Apache 
+does *not* serve anything from the "latest" cache directory.
+
+"live" contains the cached files that *are* served by Apache.  After a cached
+file is written to the latest directory, it is then copied, then that copy is 
+moved to the live directory, (holelessly) overwriting the previously cached file.
+Moving the newly cached file in this way is intended to provide the
+seamless/holeless cache, a user is only ever served a cached file, never a dynamically
+generated file.
+
+**PLEASE NOTE** This plugin works in production for my simple needs, but 
+if you use it, be sure it is doing what you expect it to and placing the cached
+files where you need them. You are responsible for ensuring your web server 
+(often Apache) serves the static cached files when needed. Some rewrite rules 
+are given in the example further below for you to use or modify for your own
+environment's needs.
+
+Rails version support
+=====================
+The Page Cache plugin is known to work with Rails 2.2.x, and I suspect is likely
+to work on other versions with minimal/no tweaking.  If you tweak it, submit
+your changes back to the project via Github for others to benefit from your work.
 
 Example
 =======
 
-In config/environments/production.rb (and config/environments/development.rb if you want
-to manually test page caching), ensure these configuration options are set:
+In config/environments/production.rb (and config/environments/development.rb if
+you want to manually test page caching), ensure these configuration options are
+set:
 
 config.cache_classes = true
 config.action_controller.perform_caching = true
@@ -56,24 +86,37 @@ class PostsController < ApplicationController
   end
 end
 
-Set up rewrite rules like the following in your .htaccess:
+Set up rewrite rules like the following in your .htaccess, replacing wherever it
+says example.tld with your domain, e.g. mywonderfulapp.com:
 
 # Turn rewriting engine on
 RewriteEngine on
 
 # Serve files from live cache directory if available
+
+# Home page
+RewriteCond %{HTTP_HOST} ^(.+)\.example.tld$
+RewriteCond %{DOCUMENT_ROOT}/cache/live/%1/index.html -f
+RewriteRule ^$ cache/live/%1/index.html [QSA,PT,L]
+
+# Non home page
 RewriteCond %{HTTP_HOST} ^(.+)\.example.tld$
 RewriteCond %{DOCUMENT_ROOT}/cache/live/%1/%{REQUEST_URI} -f
 RewriteRule ^(.*)$ cache/live/%1/$1 [QSA,PT,L]
 
-When you deploy, using capistrano, call the 'rake page_cache:update' task.
+I strongly recommend testing that these rewrite rules work for your environment,
+they may need tweaking.
 
-To update your cache periodically, call rake page_cache:update in cron. Note 
-this will only update the page cache if cached files have been expired using
-the CachedPage#expire method. This method is called when the :expires_on events
-happen.
+When you deploy, using capistrano, call
+'rake page_cache:update'.
 
-***OPTIONAL START***
+To update your cache periodically, call rake page_cache:update in cron, being
+sure to supply the correct RAILS_ENV argument e.g.
+'rake page_cache:update RAILS_ENV=production'. Note this will only update the
+page cache if cached files have been expired using the CachedPage#expire method.
+The CachedPage#expire method is called when the :expires_on events happen.
+
+***OPTIONAL :expires_on usage START***
 *If* you use the :expires_on array option with the cached_pages method as shown
 in the 2nd example above, then you will need to ensure events are passed to
 the PageCache::CachedPage.handle_event(event) method. One suggestion is to create
@@ -98,9 +141,15 @@ When a new Post is published, then you would fire the PostPublishedEvent like so
 PostPublishedEvent.fire
 
 The event would be received by CachedPage.handle_event(event) and this would
-result in cached files being expired/deleted that were defined with expires_on
-arrays containing the PostPublishedEvent class.
-***OPTIONAL END***
+result in the expected cached files being expired/deleted.
+***OPTIONAL :expires_on usage END***
 
-  
-Copyright (c) 2010 Eliot Sykes (http://blog.eliotsykes.com), released under the MIT license
+
+Contributions welcome.
+
+I know you've got something better to do, but next time you're waiting for a
+test run to complete, perhaps consider checking out my other projects at:
+http://blog.eliotsykes.com/my-projects/
+
+Copyright (c) 2010 Eliot Sykes, released under the MIT license
+
