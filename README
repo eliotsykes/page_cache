@@ -1,20 +1,21 @@
 PageCache
 =========
 
-Holeless page caching plugin for Rails.
+Not-quite-holeless page caching plugin for Rails.
 
 Inspired by the Pivotal Labs "Rails, Slashdotted: no problem" article:
 http://pivotallabs.com/users/steve/blog/articles/262-rails-slashdotted-no-problem
 
-With this plugin, users never have to wait for cached pages to be generated
-(unlike the page caching that ships with Rails).
+With this plugin, users almost never have to wait for cached pages to be generated
+as they can be generated in a rake task at deployment time. The rake task can
+also be run by cron to update cached pages.
 
 You can safely use this plugin alongside Rails' existing page caching mechanism
 as it does not interfere with it.
 
 The page cache is populated by a rake task before deployment
-completes.  The page cache can optionally be 'holelessly' expired and refreshed
-while the app is running.
+completes.  The page cache can optionally be 'almost-holelessly' expired and refreshed
+while the app is running using rake page_cache:update.
 
 The holeless/seamless caching works by having two cache stages, that exist as 
 two distinct directories.
@@ -27,10 +28,11 @@ does *not* serve anything from the "latest" cache directory.
 
 "live" contains the cached files that *are* served by Apache.  After a cached
 file is written to the latest directory, it is then copied, then that copy is 
-moved to the live directory, (holelessly) overwriting the previously cached file.
+moved to the live directory, (almost holelessly) overwriting the previously cached file.
 Moving the newly cached file in this way is intended to provide the
-seamless/holeless cache, a user is only ever served a cached file, never a dynamically
-generated file.
+seamless/holeless cache, although sometimes requests do get through to the Rails
+application which I suspect is to do with the writing operation not being atomic
+(see notes in CHANGELOG for 2010-04-20 for more information)
 
 **PLEASE NOTE** This plugin works in production for my simple needs, but 
 if you use it, be sure it is doing what you expect it to and placing the cached
