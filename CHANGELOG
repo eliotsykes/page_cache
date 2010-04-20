@@ -1,0 +1,17 @@
+CHANGELOG
+---------
+
+2010-04-20
+- Sometimes requests are getting thorough to the Rails application for pages
+  that are cached and served statically by Apache. Unsure as to why this happens
+  though it coincides with when the rake page_cache:update task runs, so probably
+  something to do with overwriting a file in the 'live' cache directory that
+  Apache is simultaneously trying to serve.  Perhaps this writing operation is
+  not atomic. Anyway, rather than risk spending too much time investigating
+  I've decided to change the behaviour to write a warning to the Rails log
+  file when this happens, instead of raising an exception that bubbles up to the
+  user. In this way the cached page will be served dynamically while the static
+  file is unavailable, although this defeats one of the main advantages of the
+  plugin over the standard Rails page cache behaviour.
+  
+
