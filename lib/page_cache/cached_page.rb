@@ -3,12 +3,15 @@ module PageCache
     include ActionController::UrlWriter
 
     cattr_accessor :cached_pages
-    attr_accessor :controller, :action, :expires_on, :url, :latest_path, :live_path, :subdomain
+    attr_accessor :controller, :action, :expires_on, :url, :latest_path,
+      :live_path, :subdomain, :ttl, :block_leaked_requests
     
     def initialize(options)
       self.controller = options[:controller]
       self.action = options[:action]
       self.expires_on = options[:expires_on]
+      self.ttl = options[:ttl]
+      self.block_leaked_requests = options[:block_leaked_requests]
       self.url = determine_url
       # TODO determine subdomain from url.
       self.subdomain = 'www'
@@ -30,11 +33,9 @@ module PageCache
     end
     
     def self.create_array(options)
-      controller = options[:controller]
-      actions = options[:actions]
-      expires_on = options[:expires_on]
+      actions = options.delete(:actions)
       cached_pages_array = actions.collect do |action|
-        new :controller => controller, :action => action, :expires_on => expires_on
+        new options.merge(:action => action)
       end
       cached_pages_array
     end
@@ -48,9 +49,10 @@ module PageCache
       if cache_up_to_date?
         puts "Cache already up to date for '#{url}'"
         return
-      else
-        puts "Updating cache for '#{url}'"
       end
+      puts "Updating cache for '#{url}'"
+      # Expire needed in case ttl exceeded is why cache_up_to_date? == false
+      expire
       # Write file to latest_path
       FileUtils.makedirs(File.dirname(latest_path))
       File.open(latest_path, "wb+") { |f| f.write(content) }
@@ -64,12 +66,28 @@ module PageCache
       FileUtils.mv latest_copy, live_path, :force => true
     end
     
+    def live_exists?
+      File.exist?(live_path)
+    end
+    
     def cache_up_to_date?
-      File.exist?(latest_path)
+      File.exist?(latest_path) && !ttl_exceeded? 
+    end
+    
+    def ttl_exceeded?
+      return false if ttl.blank?
+      lifetime_in_secs >= ttl
+    end
+    
+    def lifetime_in_secs
+      if File.exist?(live_path)
+        last_mod = File.mtime(live_path) 
+        return Time.now.to_i - last_mod.to_i
+      end
+      0
     end
     
     def expire
-      File.delete(PageCache::CachedPage.all_up_to_date_file_path) if File.exist?(PageCache::CachedPage.all_up_to_date_file_path)
       File.delete(latest_path) if File.exist?(latest_path)
     end
     
@@ -98,6 +116,10 @@ module PageCache
       cached_pages
     end
     
+    def to_s
+      inspect
+    end
+    
     private
     
     # Copied from ActionController::Caching::Pages
@@ -119,10 +141,6 @@ module PageCache
       ActionController::Base.page_cache_directory
     end
     
-    def self.all_up_to_date_file_path
-      "#{page_cache_directory}/all_up_to_date"
-    end
-    
     def self.urls_to_cache
       urls_to_cache = []
       unless cached_pages.blank?
@@ -131,5 +149,6 @@ module PageCache
       raise RuntimeError.new('urls_to_cache should not be empty, controller classes have probably not been initialized, ensure config.cache_classes = true') if urls_to_cache.empty?
       urls_to_cache
     end
+    
   end
 end

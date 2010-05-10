@@ -1,20 +1,45 @@
 PageCache
 =========
+Holeless page cache plugin for Rails.
 
-Not-quite-holeless page caching plugin for Rails.
+Sample syntax used in controller:
+
+  # Cache output of index action, expire the cache if a new post event happens.
+  cached_pages :index, { :expires_on => [ NewPostEvent ] }
+  
+  # Cache output of sitemap action, expire the cache every 4 hours (ttl = time 
+  # to live)
+  cached_pages :sitemap, { :ttl => 4.hours }
+
+Benefits:
+
+- Rake task to populate and refresh page cache
+- Holeless/Seamless page cache (almost - see "Leaked Requests" below)
+- First user to hit a page doesn't have to wait for it to be generated
+- First user to visit a page is served it from the cache
+- Pages that take a long time to generate (e.g. sitemaps with 1000s of URLs) can
+  be generated offline.
+- Cached pages can be made to expire when custom events happen in your app
+- Option to expire cached pages after a given period (ttl)
+- Can be used safely alongside existing Rails page caching mechanism without conflict
+- Simple syntax
+- Plugin well documented in this README
+
+PageCache is currently in use on MissedConnections.com
 
 Inspired by the Pivotal Labs "Rails, Slashdotted: no problem" article:
+
 http://pivotallabs.com/users/steve/blog/articles/262-rails-slashdotted-no-problem
 
-With this plugin, users almost never have to wait for cached pages to be generated
+With this plugin, users do not wait for cached pages to be generated
 as they can be generated in a rake task at deployment time. The rake task can
 also be run by cron to update cached pages.
 
 You can safely use this plugin alongside Rails' existing page caching mechanism
-as it does not interfere with it.
+as it does not conflict with it.
 
 The page cache is populated by a rake task before deployment
-completes.  The page cache can optionally be 'almost-holelessly' expired and refreshed
+completes.  The page cache can optionally be 'holelessly' expired and refreshed
 while the app is running using rake page_cache:update.
 
 The holeless/seamless caching works by having two cache stages, that exist as 
@@ -27,12 +52,10 @@ When a cached file is created, it is written to the "latest" directory. Apache
 does *not* serve anything from the "latest" cache directory.
 
 "live" contains the cached files that *are* served by Apache.  After a cached
-file is written to the latest directory, it is then copied, then that copy is 
-moved to the live directory, (almost holelessly) overwriting the previously cached file.
-Moving the newly cached file in this way is intended to provide the
-seamless/holeless cache, although sometimes requests do get through to the Rails
-application which I suspect is to do with the writing operation not being atomic
-(see notes in CHANGELOG for 2010-04-20 for more information)
+file is written to the latest directory, it is then copied and moved to the live
+directory, overwriting the previously cached file. This is intended to provide the
+holeless cache, although requests do sporadically get through to the
+Rails app (see Leaked Requests below).
 
 **PLEASE NOTE** This plugin works in production for my simple needs, but 
 if you use it, be sure it is doing what you expect it to and placing the cached
@@ -43,13 +66,12 @@ environment's needs.
 
 Rails version support
 =====================
-The Page Cache plugin is known to work with Rails 2.2.x, and I suspect is likely
+The Page Cache plugin is known to work with Rails 2.2.3, and I suspect is likely
 to work on other versions with minimal/no tweaking.  If you tweak it, submit
 your changes back to the project via Github for others to benefit from your work.
 
 Example
 =======
-
 In config/environments/production.rb (and config/environments/development.rb if
 you want to manually test page caching), ensure these configuration options are
 set:
@@ -68,8 +90,12 @@ class ApplicationController < ActionController::Base
 In a controller where you want to use page caching, e.g. PostsController:
 
 class PostsController < ApplicationController
-  # Simple page caching
+  # Simple page caching with no expiry configuration.
   cached_pages :some_action, :another_action
+  
+  # Cache the help page for upto 12 hours. After 12 hours refresh the
+  # cache (ttl = time to live in seconds)
+  cached_pages :help { :ttl => 12.hours }
   
   # The posts page is cached, but will be expired if the PostPublishedEvent
   # or PostDeleteEvent occur. For the :expires_on to have any affect, you
@@ -85,6 +111,9 @@ class PostsController < ApplicationController
   end
   
   def list
+  end
+  
+  def help
   end
 end
 
@@ -147,10 +176,44 @@ result in the expected cached files being expired/deleted.
 ***OPTIONAL :expires_on usage END***
 
 
+Leaked Requests
+===============
+In my experience, rarely a request will get through to the Rails app when you
+expect it to always be served by Apache from the cached file. To simplify
+discussion, call these requests "leaked requests".
+
+How does this happen? I'm not certain, but my best guess is that the file
+move operation used when moving a latest file to the live directory is not
+atomic. If a request for a cached page arrives during the brief window where
+a live cached file is being moved/overwritten, then Apache cannot detect the file
+and so its rewrite rules will cause the request to be passed to the Rails app.
+
+So the cache is not as holeless as I'd like but only very rarely in my experience...
+
+The good news is the plugin handles this situation gracefully, it will
+let the leaked request through and serve a dynamically generated page. Most
+developers will not need to worry about this.
+
+However, there may be *very rare* occassions where you never want the leaked request
+to be handled like this. Say you have a cached page that takes a few minutes to
+generate and you never want a server thread to be tied up generating it, then
+you can use the :block_leaked_requests option, e.g.:
+
+  # XML Sitemap takes minutes to generate, and so we only want it to be generated
+  # offline by the rake page_cache:update task called by cron and capistrano.
+  # Lets block leaked requests on the off-chance Google requests sitemap.xml at 
+  # the wrong second.
+  cached_pages :sitemap, { :ttl => 4.hours, :block_leaked_requests => true }
+  
+If :block_leaked_requests is set to true, and a leaked request happens, 
+then the plugin will try to serve a cached file serve if it finds one. If it
+cannot serve a cached file then a "503 Service Unavailable" server error is
+given to the client.
+
+===
+
 Contributions welcome.
 
-I know you've got something better to do, but next time you're waiting for a
-test run to complete, perhaps consider checking out my other projects at:
 http://blog.eliotsykes.com/my-projects/
 
 Copyright (c) 2010 Eliot Sykes, released under the MIT license

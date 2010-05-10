@@ -1,6 +1,14 @@
 CHANGELOG
 ---------
 
+2010-05-10
+- Added :ttl and :block_leaked_requests options to cached_pages.
+- Introduced concept of "leaked requests" which is what happens when requests
+  that you want to be served by the Apache+cached-file sporadically get through
+  to the Rails app.
+- Removed lock file optimization from rake page_cache:update task as this does
+  not work with :ttl option.
+
 2010-04-20
 - Sometimes requests are getting thorough to the Rails application for pages
   that are cached and served statically by Apache. Unsure as to why this happens
