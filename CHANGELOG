@@ -1,6 +1,15 @@
 CHANGELOG
 ---------
 
+2010-05-11
+- Rake page_cache:update task now outputs benchmark times
+- Introduced thread local variable CachedPage.current
+- Introduced CacheUpdater, used by rake page_cache:update
+- For improved performance, CacheUpdater will only request the content of
+  a page if the cached page is out-of-date.
+- Leaked request detection now more accurate thanks to thread local variable set
+  in CacheUpdater, no longer assume that all non-local requests are leaks.
+
 2010-05-10
 - Added :ttl and :block_leaked_requests options to cached_pages.
 - Introduced concept of "leaked requests" which is what happens when requests

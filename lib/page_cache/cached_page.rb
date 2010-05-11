@@ -21,6 +21,14 @@ module PageCache
       self.live_path = filesystem_path 'live', request_path
     end
     
+    def self.current
+      Thread.current[:page_cache_cached_page]
+    end
+    
+    def self.current=(cached_page)
+      Thread.current[:page_cache_cached_page] = cached_page
+    end
+    
     def determine_url(only_path=false)
       # TODO handle different formats
       url_for(:controller => controller.controller_path,
@@ -40,17 +48,8 @@ module PageCache
       cached_pages_array
     end
     
-    def self.cache(request, response)
-      cached_page = find_by_url request.url
-      cached_page.cache(response.body)
-    end
-    
     def cache(content)
-      if cache_up_to_date?
-        puts "Cache already up to date for '#{url}'"
-        return
-      end
-      puts "Updating cache for '#{url}'"
+      return if cache_up_to_date?
       # Expire needed in case ttl exceeded is why cache_up_to_date? == false
       expire
       # Write file to latest_path
@@ -85,6 +84,13 @@ module PageCache
         return Time.now.to_i - last_mod.to_i
       end
       0
+    end
+    
+    def remaining_ttl_in_secs
+      return 0 if ttl.blank?
+      remaining = ttl - lifetime_in_secs
+      remaining = 0 if (remaining < 0)
+      remaining
     end
     
     def expire
@@ -139,15 +145,6 @@ module PageCache
     
     def self.page_cache_directory
       ActionController::Base.page_cache_directory
-    end
-    
-    def self.urls_to_cache
-      urls_to_cache = []
-      unless cached_pages.blank?
-        urls_to_cache = cached_pages.collect { |cached_page| cached_page.url }
-      end
-      raise RuntimeError.new('urls_to_cache should not be empty, controller classes have probably not been initialized, ensure config.cache_classes = true') if urls_to_cache.empty?
-      urls_to_cache
     end
     
   end
